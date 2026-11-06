@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EnvSync Adventure — Chapter 1</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="game" width="960" height="640"></canvas>
+    <div id="hud">
+      <div id="hud-top">
+        <div class="hud-item">Chapter 1</div>
+        <div class="hud-item">Items: <span id="inventory-count">0</span></div>
+        <div class="hud-item">Money: <span id="money">0</span></div>
+      </div>
+    </div>
+    <div id="dialogue-box">
+      <div id="dialogue-text"></div>
+      <div id="dialogue-options"></div>
+    </div>
+    <div id="wallet-modal" class="modal hidden">
+      <div class="modal-content">
+        <h2>Chapter 2 Access</h2>
+        <p>Unlock the next chapter in the EnvSync story. Your contribution helps fund <br>developer tools that keep secrets safe.</p>
+        <div class="price-options">
+          <button class="price-btn" data-amount="1">$1 (Stretch)</button>
+          <button class="price-btn" data-amount="3">$3 (Supporter Badge)</button>
+        </div>
+        <div id="wallet-address" class="wallet-address">
+          <span class="label">Pay via wallet:</span>
+          <code class="mono">0x4F4a51f49054440084752e10385DD74eb4Cd9C67</code>
+        </div>
+        <div class="modal-actions">
+          <button id="close-modal" class="btn-secondary">Cancel</button>
+          <button id="confirm-pay" class="btn-primary">Confirm &amp; Unlock</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="game.js"></script>
+</body>
+</html>
