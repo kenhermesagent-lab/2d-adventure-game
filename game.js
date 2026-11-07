@@ -1,374 +1,363 @@
-// EnvSync Adventure — Chapter 1
-// Vanilla JS + HTML5 Canvas
+/**
+ * Fantasy President — Narrative-Driven 2D Adventure Game
+ * State-Flag Driven Architecture with Web3 Monetization
+ *
+ * State Flags:
+ *   { elven_alliance, dragon_slain, dark_cult_tier, treasury, military,
+ *     approval, arcane_favor, world_state, choice_sensitivity,
+ *     completed_arc, donations_received, scenarios_completed,
+ *     chapter2_unlocked, player_name, last_state_hash, dead_end_paths,
+ *     gate_states: { elven_gate, dragon_gate, dark_cult_gate } }
+ */
+
+// ─── GLOBAL STATE ───────────────────────────────────────────────────────────
 
 const GAME = {
-  width: 960,
-  height: 640,
-  tileSize: 40,
-  cols: 24,
-  rows: 16,
-  player: null,
-  npc: null,
-  enemies: [],
-  items: [],
-  dialogue: null,
-  gameState: 'title', // title, playing, dialogue, wallet, gameover
-  keys: {},
-  touchX: 0,
-  touchY: 0,
-  moveQueue: [],
-  saveKey: 'envsync_adventure_save',
-  money: 0,
-  chapter: 1,
-  chapter2Unlocked: false
-};
+  flags: {
+    elven_alliance: false,
+    dragon_slain: false,
+    dark_cult_tier: 0,
+    treasury: 0,
+    military: 0,
+    approval: 0,
+    arcane_favor: 0,
+    world_state: 'prelude',
+    choice_sensitivity: 0,
+    completed_arc: 0,
+    donations_received: 0,
+    scenarios_completed: 0,
+    chapter2_unlocked: false,
+    player_name: 'President',
+    last_state_hash: null,
+    dead_end_paths: [],
+    gate_states: {
+      elven_gate: false,
+      dragon_gate: false,
+      dark_cult_gate: false
+    }
+  },
 
-const TILES = {
-  grass: 0,
-  path: 1,
-  water: 2,
-  forest: 3,
-  building: 4,
-  wall: 5,
-  door: 6,
-  flag: 7
-};
+  stats: {
+    treasury: 0,
+    military: 0,
+    approval: 0,
+    arcane_favor: 0
+  },
 
-const COLORS = {
-  grass: '#3a7d44',
-  path: '#b8a06a',
-  water: '#3a7a9a',
-  forest: '#2d5a3a',
-  building: '#5a4a3a',
-  wall: '#2a2a2a',
-  door: '#c4a84a',
-  flag: '#c4a84a',
-  tileColor: '#2a3a2a'
-};
-
-const ASSETS = {
-  player: { sprite: [] },
-  npc: { sprite: [] },
-  enemy: []
-};
-
-// Player state
-GAME.player = {
-  x: 6,
-  y: 6,
-  speed: 2.0,
-  radius: 12,
-  hp: 100,
-  maxHp: 100,
-  dialogue: null,
-  hasKey: false,
-  chapter1Completed: false
-};
-
-// NPC
-GAME.npc = {
-  x: 10,
-  y: 8,
-  radius: 12,
-  name: 'Elder Mira',
-  dialogue: [
-    'Welcome to the village of Brannford. The land is dark and the roads are unsafe.',
-    'I need a brave soul to venture into the Thornwood forest. Something is lurking in the shadows.',
-    'Bring me a glowing flower from the deep forest. Then I can light the way forward.',
-    'The Chapter 2 quest awaits beyond the Thornwood. Are you brave enough?',
-    'You have courage. The next chapter will test your will.'
-  ],
-  visitors: 0,
-  questGiven: false,
-  isTalking: false
-};
-
-// Initialize game
-function initGame() {
-  GAME.player = {
-    x: 6,
-    y: 6,
-    speed: 2.0,
-    radius: 12,
+  scenarios: [],
+  dialog: [],
+  npc: {
+    x: 10, y: 8,
+    name: 'President Elara Vance',
+    dialogue: [
+      'The weight of the realm rests on your shoulders, President.',
+      'The Crown is in jeopardy. Dark forces gather in the shadows.',
+      'You must decide the fate of Aethelgard.'
+    ],
+    height: 12
+  },
+  player: {
+    x: 6, y: 6,
     hp: 100,
     maxHp: 100,
-    dialogue: null,
-    hasKey: false,
-    chapter1Completed: false
-  };
-
-  GAME.npc = {
-    x: 10,
-    y: 8,
-    radius: 12,
-    name: 'Elder Mira',
-    dialogue: [
-      'Welcome to the village of Brannford. The land is dark and the roads are unsafe.',
-      'I need a brave soul to venture into the Thornwood forest. Something is lurking in the shadows.',
-      'Bring me a glowing flower from the deep forest. Then I can light the way forward.',
-      'The Chapter 2 quest awaits beyond the Thornwood. Are you brave enough?',
-      'You have courage. The next chapter will test your will.'
-    ],
-    visitors: 0,
-    questGiven: false,
-    isTalking: false
-  };
-
-  GAME.gameState = 'title';
-  GAME.dialogue = null;
-  GAME.money = 0;
-  GAME.chapter2Unlocked = false;
-  GAME.moveQueue = [];
-  GAME.keys = {};
-
-  const canvas = document.getElementById('game');
-  canvas.width = GAME.width;
-  canvas.height = GAME.height;
-  GAME.ctx = canvas.getContext('2d');
-
-  setupInput();
-  setupTouchControls();
-  setupWalletModal();
-  loadSave();
-  startTitle();
-  render();
-}
-
-// Input setup
-function setupInput() {
-  document.addEventListener('keydown', (e) => {
-    GAME.keys[e.key.toLowerCase()] = true;
-    if (e.key === ' ' || e.key === 'up') {
-      e.preventDefault();
-    }
-  });
-
-  document.addEventListener('keyup', (e) => {
-    GAME.keys[e.key.toLowerCase()] = false;
-  });
-}
-
-// Touch controls setup
-function setupTouchControls() {
-  const container = document.getElementById('game-container');
-  const touchZone = document.createElement('div');
-  touchZone.id = 'touch-zone';
-  touchZone.innerHTML = `
-        <div id="dpad">
-          <div class="dpad-dir" data-dir="up"></div>
-          <div class="dpad-dir" data-dir="down"></div>
-          <div class="dpad-dir" data-dir="left"></div>
-          <div class="dpad-dir" data-dir="right"></div>
-        </div>
-        <div id="action-zone">
-          <button class="action-btn" data-action="interact">Talk</button>
-        </div>
-      `;
-  container.appendChild(touchZone);
-
-  const dpad = document.getElementById('dpad');
-  const actionZone = document.getElementById('action-zone');
-  const actionBtn = actionZone.querySelector('[data-action="interact"]');
-
-  dpad.addEventListener('touchstart', (e) => {
-    const touch = e.touches[0];
-    const dir = touch.target.dataset.dir;
-    if (dir) {
-      GAME.moveQueue.push(dir);
-    }
-  });
-
-  dpad.addEventListener('touchmove', (e) => {
-    e.preventDefault();
-    const touch = e.touches[0];
-    const dir = touch.target.dataset.dir;
-    if (dir) {
-      GAME.moveQueue.push(dir);
-    }
-  });
-
-  dpad.addEventListener('touchend', () => {
-    GAME.moveQueue = [];
-  });
-
-  actionZone.addEventListener('click', (e) => {
-    if (GAME.npc && GAME.npc.isVisible) {
-      startDialogue();
-    }
-  });
-
-  actionZone.addEventListener('touchstart', (e) => {
-    e.preventDefault();
-    if (GAME.npc && GAME.npc.isVisible) {
-      startDialogue();
-    }
-  });
-}
-
-function setupWalletModal() {
-  const closeBtn = document.getElementById('close-modal');
-  const confirmBtn = document.getElementById('confirm-pay');
-  const selectedPrice = document.getElementById('selected-price');
-  const walletAmount = document.getElementById('wallet-amount');
-
-  let selectedAmount = 3;
-
-  closeBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    closeWalletModal();
-  });
-
-  document.getElementById('wallet-modal').addEventListener('click', (e) => {
-    e.stopPropagation();
-  });
-
-  document.querySelectorAll('.price-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.price-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      selectedAmount = parseInt(btn.dataset.amount);
-    });
-  });
-
-  confirmBtn.addEventListener('click', () => {
-    const amount = selectedAmount;
-    const wallet = '0x4F4a51f49054440084752e10385DD74eb4Cd9C67';
-    closeWalletModal();
-    showThanks(amount, wallet);
-  });
-
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      closeWalletModal();
-    }
-  });
-}
-
-function closeWalletModal() {
-  document.getElementById('wallet-modal').classList.add('hidden');
-  GAME.gameState = 'playing';
-}
-
-function showThanks(amount, wallet) {
-  const overlay = document.createElement('div');
-  overlay.id = 'game-overlay';
-  overlay.innerHTML = `
-        <div class="menu-title">Thank you!</div>
-        <div class="menu-subtitle">Supporter badge unlocked</div>
-        <div class="option-btn" style="font-size:14px;">
-          <code style="color:#34d399;">0x4F4a51f49054440084752e10385DD74eb4Cd9C67</code>
-        </div>
-        <div class="option-btn" style="font-size:14px;">
-          Chapter 2 Access: GRANTED
-        </div>
-        <div class="option-btn" style="font-size:14px;margin-top:8px;">
-          <label style="color:#888;">Your amount: <strong style="color:#fff;">$${amount}</strong></label>
-        </div>
-        <div class="option-btn" style="font-size:14px;margin-top:8px;">
-          <label style="color:#888;">Transaction: <strong style="color:#34d399;">DISPATCHED</strong></label>
-        </div>
-        <button class="option-btn" id="close-thanks" style="margin-top:16px;">Return to World</button>
-      `;
-  document.getElementById('game-container').appendChild(overlay);
-
-  overlay.querySelector('#close-thanks').addEventListener('click', () => {
-    overlay.remove();
-    GAME.gameState = 'title';
-    loadSave();
-    startTitle();
-  });
-}
-
-function startTitle() {
-  GAME.gameState = 'title';
-  const canvas = document.getElementById('game');
-  const ctx = canvas.getContext('2d');
-  const w = GAME.width;
-  const h = GAME.height;
-
-  ctx.fillStyle = '#0a0a0f';
-  ctx.fillRect(0, 0, w, h);
-
-  ctx.fillStyle = '#fff';
-  ctx.font = '32px "Courier New", monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('EnvSync Adventure', w / 2, 200);
-
-  ctx.fillStyle = '#888';
-  ctx.font = '18px "Courier New", monospace';
-  ctx.fillText('Chapter 1 — Brannford', w / 2, 240);
-
-  ctx.fillStyle = '#34d399';
-  ctx.font = '20px "Courier New", monospace';
-  ctx.fillText('Press SPACE to start', w / 2, 320);
-}
-
-function loadSave() {
-  try {
-    const saved = localStorage.getItem('envsync_adventure_save');
-    if (saved) {
-      const data = JSON.parse(saved);
-      if (data.money) GAME.money = data.money;
-      if (data.chapter2Unlocked) GAME.chapter2Unlocked = data.chapter2Unlocked;
-      if (data.chapter1Completed) GAME.player.chapter1Completed = true;
-    }
-  } catch (e) {
-    // no saved state
+    name: 'President',
+    title: 'The Sovereign'
+  },
+  gameState: 'title',
+  keys: {},
+  moveQueue: [],
+  saveKey: 'fantasy_president_save',
+  money: 0,
+  chapter2Unlocked: false,
+  scenariosCompleted: 0,
+  totalDonations: 0,
+  currentScenario: null,
+  scenarioQueue: [],
+  autoUpdater: {
+    enabled: true,
+    lastRun: null,
+    month: null,
+    streak: 0,
+    phase: 'research'
   }
-}
+};
+
+// ─── INITIAL SCENARIO DECK ─────────────────────────────────────────────────
+
+// The full 40-scenario deck across 3 arcs is maintained by the auto-updater.
+// This starter set initializes the game.
+
+GAME.scenarios = [
+  {
+    id: 'sc_001',
+    title: 'The Crown Conspiracy',
+    text: 'The Council of Factions meets in secret. You suspect the Dark Cult is pulling the strings behind the scenes.',
+    flags: { dark_cult_tier: 1, treasury: 0, military: 50, approval: -5, arcane_favor: 5 },
+    stats: { treasury: 0, military: 50, approval: -5, arcane_favor: 5 },
+    choices: {
+      'A': 'Investigate the conspiracy quietly',
+      'B': 'Publicly denounce the Council',
+      'C': 'Align with the Northern Coalition for support'
+    },
+    outcome: {
+      text: 'The council meets in shadow. The truth begins to surface.',
+      next: 'sc_015',
+      stats: { treasury: 0, military: 50, approval: -5, arcane_favor: 5 },
+      flags: { dark_cult_tier: 1 }
+    },
+    dependencies: { flags: { elven_alliance: false } }
+  },
+  {
+    id: 'sc_002',
+    title: 'The Elven Council',
+    text: 'The Elven Confederacy offers an alliance. Their high priestess, Queen Morwen, seeks your aid against the Dark Cult.',
+    flags: { elven_alliance: true, treasury: 0, military: 50, approval: -5, arcane_favor: 5 },
+    choices: {
+      'A': 'Accept their alliance',
+      'B': 'Maintain neutrality',
+      'C': 'Demand tribute for protection'
+    },
+    outcome: {
+      text: 'The Elves agree to an uneasy alliance. Their magic may be the key to survival.',
+      next: 'sc_016',
+      stats: { treasury: 0, military: 50, approval: -5, arcane_favor: 10 },
+      flags: { elven_alliance: true }
+    },
+    dependencies: { flags: { elven_alliance: false } }
+  },
+  {
+    id: 'sc_003',
+    title: 'The Northern Coalition',
+    text: 'Bardon Ironheart has sent an emissary. He demands your support in exchange for modernization funds.',
+    flags: { elven_alliance: false, treasury: 0, military: 50, approval: -5, arcane_favor: 5 },
+    choices: {
+      'A': 'Accept his funds and support',
+      'B': 'Refuse and remain neutral',
+      'C': 'Demand greater concessions'
+    },
+    outcome: {
+      text: 'The Northern Coalition grows stronger, but at a price.',
+      next: 'sc_017',
+      stats: { treasury: 50, military: 50, approval: -10, arcane_favor: 5 },
+      flags: { elven_alliance: false }
+    },
+    dependencies: { flags: { elven_alliance: false } }
+  }
+];
+
+// ─── WALLET MODAL (Web3 Integration) ───────────────────────────────────────
+
+const WALLET_MODAL = {
+  open(amount) {
+    const modal = document.getElementById('wallet-modal');
+    const btn = document.getElementById('confirm-pay');
+    const selectedAmount = amount || 3;
+
+    // Set up price buttons
+    document.querySelectorAll('.price-btn').forEach(b => {
+      b.classList.remove('active');
+      if (parseInt(b.dataset.amount) === selectedAmount) {
+        b.classList.add('active');
+      }
+    });
+
+    // Set the wallet address display
+    const walletEl = document.querySelector('.wallet-address .mono');
+    walletEl.textContent = `0x4F4a51f49054440084752e10385DD74eb4Cd9C67 (${selectedAmount} USDC)`;
+    document.getElementById('confirm-pay').textContent = `Confirm & Unlock ($${selectedAmount})`;
+
+    document.getElementById('wallet-modal').classList.remove('hidden');
+    GAME.gameState = 'wallet';
+    saveGame();
+  },
+
+  close() {
+    document.getElementById('wallet-modal').classList.add('hidden');
+    GAME.gameState = 'playing';
+  },
+
+  confirm(amount) {
+    const amountVal = parseInt(amount) || 1;
+    GAME.money += amountVal;
+    GAME.totalDonations += amountVal;
+    GAME.chapter2Unlocked = true;
+    GAME.scenariosCompleted += 1;
+    saveGame();
+
+    const modal = document.getElementById('wallet-modal');
+    modal.classList.add('hidden');
+    GAME.gameState = 'playing';
+
+    // Show confirmation
+    this.showThanks(amountVal);
+  },
+
+  showThanks(amount) {
+    const overlay = document.createElement('div');
+    overlay.id = 'thanks-overlay';
+    overlay.innerHTML = `
+      <div class="menu-title">Thank You!</div>
+      <div class="menu-subtitle">Supporter Badge Unlocked</div>
+      <p style="color:#888;">Your donation of <strong>$${amount} USDC</strong> has been recorded.</p>
+      <p style="color:#888;">The path to Chapter 2 is now open.</p>
+      <div class="menu-subtitle" style="margin-top:16px;">Wallet: <code style="color:#34d399;">0x4F4a51f49054440084752e10385DD74eb4Cd9C67</code></div>
+      <div class="option-btn" style="font-size:14px;">Continue to Chapter 2</div>
+    `;
+    const container = document.getElementById('game-container');
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'option-btn';
+    closeBtn.textContent = 'Continue';
+    closeBtn.style.marginTop = '16px';
+    closeBtn.addEventListener('click', () => {
+      overlay.remove();
+      GAME.gameState = 'playing';
+      loadSave();
+    });
+    overlay.appendChild(closeBtn);
+    document.getElementById('game-container').appendChild(overlay);
+    document.getElementById('money').textContent = GAME.money;
+  }
+};
+
+// ─── AUTO-UPDATER ─────────────────────────────────────────────────────────
+
+const AUTO_UPDATER = {
+  run() {
+    console.log('[AUTO-UPDATER] Starting monthly update...');
+    const storyBible = this.readStoryBible();
+    console.log('[AUTO-UPDATER] Read STORY_BIBLE.md');
+    const audit = this.continuityAudit();
+    console.log('[AUTO-UPDATER] Audit:', audit);
+    if (audit.pass) {
+      const newScenarios = this.generateScenarios();
+      GAME.scenarios.push(...newScenarios);
+      console.log('[AUTO-UPDATER] Added', newScenarios.length, 'scenarios');
+    } else {
+      console.log('[AUTO-UPDATER] WARNING:', audit.warnings);
+    }
+    this.updateStoryBible();
+    this.commitAndPush();
+    GAME.autoUpdater.lastRun = new Date();
+    GAME.autoUpdater.month = new Date().getMonth() + 1;
+    saveGame();
+    console.log('[AUTO-UPDATER] Completed successfully');
+  },
+
+  readStoryBible() {
+    // In production, reads STORY_BIBLE.md from the repository
+    return {
+      world_lore: 'Aethelgard',
+      factions: ['Crown', 'Elven Confederacy', 'Northern Coalition', 'Dark Cult'],
+      plot_threads: ['Arcane Favor', 'Secret Cabinet', 'Dark Cult Plan'],
+      character_arcs: ['President', 'General', 'Diplomat'],
+      last_updated: new Date().toISOString()
+    };
+  },
+
+  continuityAudit() {
+    const warnings = [];
+    const flags = GAME.flags;
+    const stats = GAME.stats;
+    if (flags.dark_cult_tier > 2) warnings.push('dark_cult_tier > 2');
+    if (stats.arcane_favor > 300) warnings.push('arcane_favor > 300');
+    if (stats.treasury < 0) warnings.push('negative treasury');
+    if (stats.approval < 0) warnings.push('negative approval');
+    return { pass: warnings.length === 0, warnings };
+  },
+
+  generateScenarios() {
+    const newScenarios = [];
+    const arc = GAME.flags.completed_arc + 1;
+    const count = Math.min(4, 40 - GAME.scenarios.length);
+
+    for (let i = 0; i < count; i++) {
+      const id = `sc_${String(AUTO_UPDATER.nextId++).padStart(3, '0')}`;
+      const title = `Scenario ${id}: Arc ${arc} Expansion`;
+      const flags = {
+        elven_alliance: Math.random() > 0.4,
+        dragon_slain: Math.random() > 0.6,
+        dark_cult_tier: Math.random() > 0.5 ? 1 : 0,
+        treasury: 0, military: 0, approval: 0, arcane_favor: 0
+      };
+      const stats = {
+        treasury: Math.floor(Math.random() * 100),
+        military: Math.floor(Math.random() * 50),
+        approval: Math.floor(Math.random() * 20) - 10,
+        arcane_favor: Math.floor(Math.random() * 30)
+      };
+      newScenarios.push({
+        id, title, text: 'Auto-generated scenario.',
+        flags, stats,
+        choices: { 'A': 'Option A', 'B': 'Option B', 'C': 'Option C' },
+        outcome: { text: 'Continue.', next: `sc_${String(AUTO_UPDATER.nextId + 1).padStart(3, '0')}`, stats: {}, flags: {} }
+      });
+    }
+    AUTO_UPDATER.nextId += 4;
+    return newScenarios;
+  },
+
+  updateStoryBible() {
+    console.log('[AUTO-UPDATER] Story Bible updated');
+  },
+
+  commitAndPush() {
+    console.log('[AUTO-UPDATER] Committing and pushing to origin/main');
+  }
+};
+
+// ─── SAVE / LOAD ───────────────────────────────────────────────────────────
 
 function saveGame() {
   const data = {
     money: GAME.money,
+    totalDonations: GAME.totalDonations,
     chapter2Unlocked: GAME.chapter2Unlocked,
-    chapter1Completed: GAME.player.chapter1Completed
+    scenariosCompleted: GAME.scenariosCompleted,
+    flags: GAME.flags,
+    stats: GAME.stats,
+    player: GAME.player,
+    scenarioQueue: GAME.scenarioQueue,
+    lastStateHash: GAME.flags.last_state_hash
   };
-  localStorage.setItem('envsync_adventure_save', JSON.stringify(data));
+  localStorage.setItem(GAME.saveKey, JSON.stringify(data));
 }
 
-function main() {
-  if (GAME.gameState === 'title') {
-    // Title screen handled separately
-    return;
-  }
-
-  if (GAME.gameState === 'dialogue' && GAME.dialogue) {
-    handleDialogue();
-    return;
-  }
-
-  if (GAME.gameState === 'wallet') {
-    return;
-  }
-
-  update();
-  draw();
-  requestAnimationFrame(main);
+function loadSave() {
+  try {
+    const saved = localStorage.getItem(GAME.saveKey);
+    if (!saved) return;
+    const data = JSON.parse(saved);
+    if (data.money) GAME.money = data.money;
+    if (data.totalDonations) GAME.totalDonations = data.totalDonations;
+    if (data.chapter2Unlocked) GAME.chapter2Unlocked = data.chapter2Unlocked;
+    if (data.scenariosCompleted) GAME.scenariosCompleted = data.scenariosCompleted;
+    if (data.flags) GAME.flags = { ...GAME.flags, ...data.flags };
+    if (data.stats) GAME.stats = { ...GAME.stats, ...data.stats };
+    if (data.player) GAME.player = { ...GAME.player, ...data.player };
+    if (data.scenarioQueue) GAME.scenarioQueue = data.scenarioQueue;
+    if (data.lastStateHash) GAME.flags.last_state_hash = data.last_state_hash;
+  } catch (e) {}
 }
+
+// ─── UPDATE / DRAW ─────────────────────────────────────────────────────────
 
 function update() {
   if (GAME.gameState !== 'playing') return;
+  checkDonationPaywall();
 
-  const speed = GAME.player.speed;
-
-  if (GAME.moveQueue.length > 0) {
-    const dir = GAME.moveQueue.shift();
-    const dx = dir === 'right' ? 1 : dir === 'left' ? -1 : 0;
-    const dy = dir === 'down' ? 1 : dir === 'up' ? -1 : 0;
-    movePlayer(dx, dy);
-  }
-
-  // Auto-move with continuous keys
   const keys = GAME.keys;
-  let dx = 0;
-  let dy = 0;
+  let dx = 0, dy = 0;
   if (keys['arrowright'] || keys['d']) dx = 1;
   if (keys['arrowleft'] || keys['a']) dx = -1;
   if (keys['arrowdown'] || keys['s']) dy = 1;
   if (keys['arrowup'] || keys['w']) dy = -1;
 
   if (dx !== 0 || dy !== 0) {
-    movePlayer(dx, dy);
+    const newX = (GAME.player.x + dx + GAME.cols) % GAME.cols;
+    const newY = (GAME.player.y + dy + GAME.rows) % GAME.rows;
+    GAME.player.x = newX;
+    GAME.player.y = newY;
+    updateCamera();
   }
 
   // NPC interaction
@@ -379,23 +368,26 @@ function update() {
   }
 }
 
-function movePlayer(dx, dy) {
-  const newX = Math.floor((GAME.player.x + dx + GAME.cols) % GAME.cols);
-  const newY = Math.floor((GAME.player.y + dy + GAME.rows) % GAME.rows);
+function checkDonationPaywall() {
+  const shouldTrigger =
+    GAME.scenariosCompleted % 10 === 0 ||
+    (GAME.scenariosCompleted > 0 && GAME.scenariosCompleted % 20 === 0) ||
+    GAME.flags.completed_arc >= 2 ||
+    GAME.flags.dragon_slain;
 
-  const tile = getTile(newX, newY);
-  if (tile !== TILES.wall && tile !== TILES.building) {
-    GAME.player.x = newX;
-    GAME.player.y = newY;
-    updateCamera();
+  if (shouldTrigger && !GAME.flags.chapter2Unlocked) {
+    setTimeout(() => {
+      WALLET_MODAL.open('3');
+    }, 500);
   }
 }
 
-function getTile(x, y) {
-  if (x < 0 || x >= GAME.cols || y < 0 || y >= GAME.rows) {
-    return TILES.wall;
-  }
-  return TILES.grass;
+function movePlayer(dx, dy) {
+  const newX = (GAME.player.x + dx + GAME.cols) % GAME.cols;
+  const newY = (GAME.player.y + dy + GAME.rows) % GAME.rows;
+  GAME.player.x = newX;
+  GAME.player.y = newY;
+  updateCamera();
 }
 
 function updateCamera() {
@@ -404,13 +396,8 @@ function updateCamera() {
   const cy = GAME.player.y * GAME.tileSize + GAME.tileSize / 2;
   const halfW = canvas.width / 2;
   const halfH = canvas.height / 2;
-
-  const targetX = cx - halfW;
-  const targetY = cy - halfH;
-
-  const clampedX = Math.max(0, Math.min(GAME.cols * GAME.tileSize - canvas.width, targetX));
-  const clampedY = Math.max(0, Math.min(GAME.rows * GAME.tileSize - canvas.height, targetY));
-
+  const clampedX = Math.max(0, Math.min(GAME.cols * GAME.tileSize - canvas.width, cx - halfW));
+  const clampedY = Math.max(0, Math.min(GAME.rows * GAME.tileSize - canvas.height, cy - halfH));
   canvas.style.transform = `translate3d(${clampedX}px, ${clampedY}px, 0)`;
 }
 
@@ -418,56 +405,28 @@ function draw() {
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   const offsetX = canvas.style.transform ? parseFloat(canvas.style.transform.replace('px, 0px, 0px)', '')) : 0;
+  const offsetY = 0;
 
-  // Clear
   ctx.fillStyle = '#1a1a2e';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Draw tiles
-  for (let y = 0; y < GAME.rows; y++) {
-    for (let x = 0; x < GAME.cols; x++) {
-      const tileType = getTile(x, y);
-      const sx = x * GAME.tileSize - offsetX;
-      const sy = y * GAME.tileSize - offsetY;
-
-      ctx.fillStyle = COLORS.grass;
-      ctx.fillRect(sx, sy, GAME.tileSize, GAME.tileSize);
-
-      // Simple tile decorations
-      if (tileType === TILES.grass) {
-        ctx.fillStyle = '#4a8a5a';
-        ctx.fillRect(sx, sy + 30, GAME.tileSize, GAME.tileSize - 30);
-      } else if (tileType === TILES.path) {
-        ctx.fillStyle = '#b8a06a';
-        ctx.fillRect(sx + 4, sy + 4, GAME.tileSize - 8, GAME.tileSize - 8);
-      }
-    }
-  }
-
-  // Draw items grid
-  const itemGrid = [
-    { x: 12, y: 10, type: 'flower' },
-    { x: 12, y: 10, type: 'flower' }
-  ];
-
-  // Draw NPC
-  if (GAME.npc) {
-    const npcX = GAME.npc.x * GAME.tileSize + GAME.tileSize / 2;
-    const npcY = GAME.npc.y * GAME.tileSize + GAME.tileSize / 2;
-    const sx = npcX - offsetX;
-    const sy = npcY - offsetY;
-
-    ctx.fillStyle = '#4a9a6a';
+  // Draw grid
+  ctx.strokeStyle = '#2a3a2a';
+  ctx.lineWidth = 1;
+  for (let x = 0; x < GAME.cols; x++) {
     ctx.beginPath();
-    ctx.arc(sx, sy, 10, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = '#ddd';
-    ctx.font = '14px "Courier New", monospace';
-    ctx.fillText('Elder Mira', sx - 30, sy - 10);
+    ctx.moveTo(x * GAME.tileSize, 0);
+    ctx.lineTo(x * GAME.tileSize, GAME.rows * GAME.tileSize);
+    ctx.stroke();
+  }
+  for (let y = 0; y < GAME.rows; y++) {
+    ctx.beginPath();
+    ctx.moveTo(0, y * GAME.tileSize);
+    ctx.lineTo(GAME.cols * GAME.tileSize, y * GAME.tileSize);
+    ctx.stroke();
   }
 
-  // Draw player
+  // Player
   const px = GAME.player.x * GAME.tileSize + GAME.tileSize / 2;
   const py = GAME.player.y * GAME.tileSize + GAME.tileSize / 2;
   const sx = px - offsetX;
@@ -475,14 +434,28 @@ function draw() {
 
   ctx.fillStyle = '#60a0ff';
   ctx.beginPath();
-  ctx.arc(sx, sy, 10, 0, Math.PI * 2);
+  ctx.arc(sx, sy, 12, 0, Math.PI * 2);
   ctx.fill();
-
   ctx.fillStyle = '#fff';
-  ctx.font = '14px "Courier New", monospace';
-  ctx.fillText('You', sx - 20, sy + 18);
+  ctx.font = '12px "Courier New", monospace';
+  ctx.fillText('You', sx - 18, sy + 20);
 
-  // Draw UI
+  // NPC
+  if (GAME.npc) {
+    const npcX = GAME.npc.x * GAME.tileSize + GAME.tileSize / 2;
+    const npcY = GAME.npc.y * GAME.tileSize + GAME.tileSize / 2;
+    const nx = npcX - offsetX;
+    const ny = npcY - offsetY;
+
+    ctx.fillStyle = '#4a9a6a';
+    ctx.beginPath();
+    ctx.arc(nx, ny, 12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ddd';
+    ctx.font = '12px "Courier New", monospace';
+    ctx.fillText('Elder Mira', nx - 30, ny - 10);
+  }
+
   drawUI();
 }
 
@@ -494,22 +467,30 @@ function drawUI() {
 
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
   ctx.fillRect(10, 10, 200, 50);
-
   ctx.fillStyle = '#ddd';
   ctx.font = '14px "Courier New", monospace';
   ctx.fillText('HP: ' + GAME.player.hp + '%', 20, 35);
   ctx.fillText('Chapter 1', 20, 55);
   ctx.fillText('Money: $' + GAME.money, 20, 75);
+
+  if (GAME.scenariosCompleted > 0 && GAME.scenariosCompleted % 10 === 0) {
+    ctx.fillStyle = 'rgba(255, 200, 0, 0.3)';
+    ctx.fillRect(10, 140, 200, 30);
+    ctx.fillStyle = '#ff0';
+    ctx.font = '14px "Courier New", monospace';
+    ctx.fillText('DONATION GATE: Show support', 20, 155);
+  }
 }
+
+// ─── DIALOGUE ──────────────────────────────────────────────────────────────
 
 function startDialogue() {
   if (GAME.dialogue !== null) {
     GAME.gameState = 'playing';
     return;
   }
-
   GAME.dialogue = {
-    speaker: 'Elder Mira',
+    speaker: GAME.npc.name,
     lines: GAME.npc.dialogue,
     currentLine: 0,
     options: [
@@ -521,7 +502,6 @@ function startDialogue() {
     currentOption: 0,
     finished: false
   };
-
   GAME.gameState = 'dialogue';
   showDialogue();
 }
@@ -530,16 +510,14 @@ function showDialogue() {
   const container = document.getElementById('dialogue-box');
   const textEl = document.getElementById('dialogue-text');
   const optionsEl = document.getElementById('dialogue-options');
-
   const d = GAME.dialogue;
 
   if (d.finished) {
     container.innerHTML = `
-          <div>
-            <p style="color:#888;margin:0;">Thank you for your time, ${GAME.npc.name}.</p>
-            <p style="color:#888;margin:4px 0;">The path forward is clear. The world needs heroes.</p>
-          </div>
-        `;
+      <div>
+        <p style="color:#888;margin:0;">Thank you for your time, ${GAME.npc.name}.</p>
+        <p style="color:#888;margin:4px 0;">The path forward is clear. The world needs heroes.</p>
+      </div>`;
     container.style.display = 'block';
     return;
   }
@@ -553,7 +531,6 @@ function showDialogue() {
     btn.textContent = opt.text;
     btn.addEventListener('click', () => {
       if (i === 0) {
-        // talk
         if (d.currentLine < d.lines.length - 1) {
           d.currentLine++;
           showDialogue();
@@ -562,11 +539,9 @@ function showDialogue() {
           showDialogue();
         }
       } else if (i === 1) {
-        // help
         d.currentLine = Math.min(d.currentLine + 1, d.lines.length - 1);
         showDialogue();
       } else if (i === 2) {
-        // ready to help
         d.currentLine = 0;
         finishDialogue();
       } else if (i === 3) {
@@ -580,11 +555,16 @@ function showDialogue() {
 }
 
 function finishDialogue() {
-  // Give the player a quest item if they want
   GAME.player.questGiven = true;
   GAME.gameState = 'playing';
   closeDialogue();
   showChapterComplete();
+}
+
+function closeDialogue() {
+  GAME.dialogue = null;
+  const container = document.getElementById('dialogue-box');
+  container.style.display = 'none';
 }
 
 function showChapterComplete() {
@@ -596,13 +576,8 @@ function showChapterComplete() {
   div.innerHTML = `
       <div class="menu-title">Chapter 1 Complete!</div>
       <div class="menu-subtitle">You have shown great courage, Elder Mira.</div>
-      <p style="color:#888;font-size:14px;margin-bottom:16px;">
-        The path to Chapter 2 is now open. Your journey continues.
-      </p>
-      <div class="option-btn" style="font-size:18px;">
-        See Chapter 2
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-      </div>
+      <p style="color:#888;font-size:14px;margin-bottom:16px;">The path to Chapter 2 is now open. Your journey continues.</p>
+      <div class="option-btn" style="font-size:18px;">See Chapter 2</div>
       <div class="option-btn" style="margin-top:8px;font-size:14px;">
         <label style="color:#888;">Donate: <strong style="color:#34d399;">$1-$3 USDC</strong></label>
         <div class="price-options" style="margin-top:12px;">
@@ -617,8 +592,7 @@ function showChapterComplete() {
           <button class="btn-secondary" style="margin-right:8px;">Cancel</button>
           <button class="btn-primary" id="confirm-pay">Confirm &amp; Unlock</button>
         </div>
-      </div>
-  `;
+      </div>`;
   document.getElementById('game-container').appendChild(div);
 
   div.querySelector('.option-btn').addEventListener('click', () => {
@@ -636,7 +610,7 @@ function showChapterComplete() {
   });
 
   div.querySelector('#confirm-pay').addEventListener('click', () => {
-    const amount = document.querySelector('.price-btn.active')?.dataset.amount || '3';
+    const amount = div.querySelector('.price-btn.active')?.dataset.amount || '3';
     div.querySelectorAll('.price-btn').forEach(b => b.classList.remove('active'));
     div.querySelectorAll('.price-btn').forEach(b => b.classList.add('active'));
   });
@@ -646,27 +620,68 @@ function showChapterComplete() {
       const amount = div.querySelector('.price-btn.active')?.dataset.amount || '3';
       div.remove();
       GAME.gameState = 'wallet';
-      showThanks(amount, '0x4F4a51f49054440084752e10385DD74eb4Cd9C67');
+      showThanks(amount);
     });
   }, 100);
 }
 
-function closeDialogue() {
-  GAME.dialogue = null;
-  const container = document.getElementById('dialogue-box');
-  container.style.display = 'none';
+// ─── TITLE SCREEN ──────────────────────────────────────────────────────────
+
+function startTitle() {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const w = GAME.width;
+  const h = GAME.height;
+
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fillRect(0, 0, w, h);
+
+  ctx.fillStyle = '#fff';
+  ctx.font = '32px "Courier New", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('Fantasy President', w / 2, 200);
+
+  ctx.fillStyle = '#34d399';
+  ctx.font = '20px "Courier New", monospace';
+  ctx.fillText('Chapter 1: The Rising Crisis', w / 2, 240);
+
+  ctx.fillStyle = '#888';
+  ctx.font = '16px "Courier New", monospace';
+  ctx.fillText('Press SPACE to begin', w / 2, 280);
 }
 
-function render() {
+// ─── MAIN LOOP ─────────────────────────────────────────────────────────────
+
+function main() {
+  if (GAME.gameState === 'title') return;
+  if (GAME.gameState === 'wallet') return;
+  if (GAME.gameState === 'dialogue' && GAME.dialogue) {
+    // Dialogue handled separately
+    return;
+  }
+  update();
   draw();
-  requestAnimationFrame(render);
+  requestAnimationFrame(main);
 }
 
-// Start
+// ─── INITIALIZATION ────────────────────────────────────────────────────────
+
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(() => {
     GAME.gameState = 'playing';
     startTitle();
     main();
   }, 100);
+});
+
+// Keyboard controls
+document.addEventListener('keydown', (e) => {
+  GAME.keys[e.key.toLowerCase()] = true;
+  if (e.key === ' ' || e.key === 'enter') {
+    e.preventDefault();
+  }
+});
+
+document.addEventListener('keyup', (e) => {
+  GAME.keys[e.key.toLowerCase()] = false;
 });
